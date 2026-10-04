@@ -1,3 +1,4 @@
+# Netlify hosts the React SPA. Set VITE_API_URL to the public FastAPI URL.
 [build]
   base = "frontend"
   command = "npm run build"
