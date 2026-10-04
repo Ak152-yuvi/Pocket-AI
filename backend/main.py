@@ -40,13 +40,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS configuration
+# CORS configuration. FRONTEND_URL may contain comma-separated deployed frontend origins.
+configured_frontend_urls = os.getenv("FRONTEND_URL", "")
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    os.getenv("FRONTEND_URL", "http://localhost:5173")
+    *[url.strip().rstrip("/") for url in configured_frontend_urls.split(",") if url.strip()]
 ]
 
 app.add_middleware(
