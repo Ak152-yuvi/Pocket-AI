@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, User, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
+import { Sparkles, User, Mail, Lock, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { authErrorMessage } from '../services/identity';
 
 export const RegisterPage: React.FC = () => {
   const [name, setName] = useState('');
@@ -9,6 +10,7 @@ export const RegisterPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register } = useAuth();
@@ -17,6 +19,7 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
+    setSuccessMsg(null);
 
     if (!name || !email || !password || !confirmPassword) {
       setErrorMsg('Please fill in all required fields.');
@@ -35,10 +38,16 @@ export const RegisterPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await register(name, email, password, confirmPassword);
-      navigate('/dashboard', { replace: true });
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Registration failed. An account with this email may already exist.');
+      const signedIn = await register(name, email, password, confirmPassword);
+      if (signedIn) {
+        navigate('/dashboard', { replace: true });
+      } else {
+        setSuccessMsg('Account created. Check your email and follow the confirmation link before signing in.');
+        setPassword('');
+        setConfirmPassword('');
+      }
+    } catch (err: unknown) {
+      setErrorMsg(authErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -66,9 +75,16 @@ export const RegisterPage: React.FC = () => {
 
         {/* Error Alert */}
         {errorMsg && (
-          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start space-x-2 text-xs text-red-300 animate-in fade-in">
+          <div role="alert" className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start space-x-2 text-xs text-red-300 animate-in fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div role="status" className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start space-x-2 text-xs text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{successMsg}</span>
           </div>
         )}
 

@@ -18,6 +18,7 @@ import {
 // or the API root (https://api.example.com/api). The FastAPI routes all live
 // under /api, so normalize both forms to avoid production 404s.
 const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+export const hasBackendApi = Boolean(configuredApiUrl);
 const API_BASE = configuredApiUrl
   ? (configuredApiUrl.endsWith('/api') ? configuredApiUrl : `${configuredApiUrl}/api`)
   : '/api';
@@ -28,6 +29,9 @@ function getAuthHeader(): Record<string, string> {
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.headers.get('content-type')?.includes('application/json')) {
+    throw new Error('The planning backend is unavailable. Configure VITE_API_URL with the deployed FastAPI backend URL.');
+  }
   if (!res.ok) {
     let errorDetail = `Request failed with status ${res.status}`;
     try {

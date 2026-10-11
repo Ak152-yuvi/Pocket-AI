@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Sparkles, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { authErrorMessage } from '../services/identity';
 
 export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -9,11 +10,15 @@ export const LoginPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { login } = useAuth();
+  const { login, user, isLoading, authError } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = (location.state as any)?.from?.pathname || '/dashboard';
+
+  useEffect(() => {
+    if (user && !isLoading) navigate(from, { replace: true });
+  }, [user, isLoading, from, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +33,8 @@ export const LoginPage: React.FC = () => {
     try {
       await login(email, password);
       navigate(from, { replace: true });
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Login failed. Please check your credentials.');
+    } catch (err: unknown) {
+      setErrorMsg(authErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -56,10 +61,10 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Error Alert */}
-        {errorMsg && (
-          <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start space-x-2 text-xs text-red-300 animate-in fade-in">
+        {(errorMsg || authError) && (
+          <div role="alert" className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-start space-x-2 text-xs text-red-300 animate-in fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{errorMsg}</span>
+            <span>{errorMsg || authError}</span>
           </div>
         )}
 
@@ -105,7 +110,7 @@ export const LoginPage: React.FC = () => {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isLoading}
             className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 hover:opacity-95 text-white font-bold text-sm shadow-lg shadow-purple-600/30 flex items-center justify-center space-x-2 transition-all disabled:opacity-50 cursor-pointer"
           >
             <span>{isSubmitting ? 'Signing In...' : 'Sign In to Assistant'}</span>
