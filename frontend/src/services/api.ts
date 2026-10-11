@@ -14,7 +14,13 @@ import {
   HistoryDetailResponse
 } from '../types';
 
-const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+// VITE_API_URL may be either the backend origin (https://api.example.com)
+// or the API root (https://api.example.com/api). The FastAPI routes all live
+// under /api, so normalize both forms to avoid production 404s.
+const configuredApiUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
+const API_BASE = configuredApiUrl
+  ? (configuredApiUrl.endsWith('/api') ? configuredApiUrl : `${configuredApiUrl}/api`)
+  : '/api';
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('ps_token');
