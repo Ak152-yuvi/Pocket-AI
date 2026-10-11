@@ -1,14 +1,23 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, HealthStatus } from '../types';
-import { api } from '../services/api';
+import { api, hasBackendApi } from '../services/api';
+import {
+  getUser,
+  login as identityLogin,
+  logout as identityLogout,
+  onAuthChange,
+  signup,
+} from '@netlify/identity';
+import { authErrorMessage, restoreIdentityUser, toAppUser } from '../services/identity';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
   health: HealthStatus | null;
+  authError: string | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, confirmPassword: string) => Promise<void>;
+  register: (name: string, email: string, password: string, confirmPassword: string) => Promise<boolean>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   refreshHealth: () => Promise<void>;
@@ -17,13 +26,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('ps_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('ps_token'));
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(() => hasBackendApi ? localStorage.getItem('ps_token') : null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const fetchHealth = async () => {
     try {
@@ -35,6 +42,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshUser = async () => {
+    if (!hasBackendApi) {
+      const currentUser = await getUser();
+      setUser(currentUser ? toAppUser(currentUser) : null);
+      setIsLoading(false);
+      return;
+    }
     const currentToken = localStorage.getItem('ps_token');
     if (!currentToken) {
       setUser(null);
@@ -57,12 +70,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    refreshUser();
     fetchHealth();
+    if (hasBackendApi) {
+      refreshUser();
+      return;
+    }
+
+    let active = true;
+    const unsubscribe = onAuthChange((_event, currentUser) => {
+      if (active) {
+        setUser(currentUser ? toAppUser(currentUser) : null);
+      }
+    });
+
+    restoreIdentityUser()
+      .then((currentUser) => {
+        if (active) setUser(currentUser);
+      })
+      .catch((error: unknown) => {
+        if (active) setAuthError(authErrorMessage(error));
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
-    const resp = await api.login({ email, password });
+    setAuthError(null);
+    if (!hasBackendApi) {
+      const currentUser = await identityLogin(email.trim(), password);
+      setUser(toAppUser(currentUser));
+      return;
+    }
+    const resp = await api.login({ email: email.trim(), password });
     localStorage.setItem('ps_token', resp.access_token);
     localStorage.setItem('ps_user', JSON.stringify(resp.user));
     setToken(resp.access_token);
@@ -70,9 +115,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (name: string, email: string, password: string, confirmPassword: string) => {
+    setAuthError(null);
+    if (password !== confirmPassword) {
+      throw new Error('Passwords do not match.');
+    }
+    if (!hasBackendApi) {
+      const currentUser = await signup(email.trim(), password, { full_name: name.trim() });
+      if (!currentUser.confirmedAt) return false;
+      setUser(toAppUser(currentUser));
+      return true;
+    }
     const resp = await api.register({
-      name,
-      email,
+      name: name.trim(),
+      email: email.trim(),
       password,
       confirm_password: confirmPassword,
     });
@@ -80,12 +135,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('ps_user', JSON.stringify(resp.user));
     setToken(resp.access_token);
     setUser(resp.user);
+    return true;
   };
 
   const logout = async () => {
-    await api.logout();
-    setToken(null);
-    setUser(null);
+    try {
+      if (hasBackendApi) await api.logout();
+      else await identityLogout();
+    } finally {
+      setToken(null);
+      setUser(null);
+    }
   };
 
   return (
@@ -95,6 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isLoading,
         health,
+        authError,
         login,
         register,
         logout,
